@@ -1,0 +1,6 @@
+{
+  "name": "Lex-Omni Legal Assistant",
+  "description": "A legal assistant app powered by AI.",
+  "requestFramePermissions": ["microphone", "geolocation"],
+  "majorCapabilities": []
+}
