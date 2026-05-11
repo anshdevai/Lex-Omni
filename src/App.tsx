@@ -261,63 +261,25 @@ function ChatApp({ userData }: { userData: any }) {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
-
-  const speak = async (text: string) => {
-    setIsSpeaking(true);
-    try {
-      const cleanText = text.replace(/[*#\`]/g, '');
-      const response = await ai.models.generateContent({
-        model: "gemini-3.1-flash-tts-preview",
-        contents: [{ parts: [{ text: cleanText }] }],
-        config: {
-          responseModalities: ["AUDIO"],
-          speechConfig: {
-              voiceConfig: {
-                prebuiltVoiceConfig: { voiceName: 'Kore' },
-              },
-          },
-        },
-      });
-
-      const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-      if (base64Audio) {
-        const binaryString = window.atob(base64Audio);
-        const len = binaryString.length;
-        const bytes = new Uint8Array(len);
-        for (let i = 0; i < len; i++) {
-              bytes[i] = binaryString.charCodeAt(i);
-        }
-        // Convert 16-bit PCM to Float32
-        const floats = new Float32Array(bytes.length / 2);
-        const view = new DataView(bytes.buffer);
-        for(let i=0; i<floats.length; i++){
-          floats[i] = view.getInt16(i * 2, true) / 32768; // true for little endian
-        }
-        
-        const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-        const buffer = audioCtx.createBuffer(1, floats.length, 24000);
-        buffer.getChannelData(0).set(floats);
-        const source = audioCtx.createBufferSource();
-        source.buffer = buffer;
-        source.connect(audioCtx.destination);
-        source.onended = () => setIsSpeaking(false);
-        source.start();
-        
-        // Save the audio context to stop it later
-        (window as any).currentAudioSource = source;
-      } else {
-        setIsSpeaking(false);
-      }
-    } catch (e) {
-      console.error(e);
-      setIsSpeaking(false);
+  
+  const speak = (text: string) => {
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+      const cleanText = text.replace(/[*#`]/g, '');
+      const utterance = new SpeechSynthesisUtterance(cleanText);
+      const voices = window.speechSynthesis.getVoices();
+      const preferredVoice = voices.find(v => v.name.includes('Google') || v.name.includes('Premium') || v.name.includes('Natural')) || voices[0];
+      if (preferredVoice) utterance.voice = preferredVoice;
+      utterance.onstart = () => setIsSpeaking(true);
+      utterance.onend = () => setIsSpeaking(false);
+      utterance.onerror = () => setIsSpeaking(false);
+      window.speechSynthesis.speak(utterance);
     }
   };
 
   const stopSpeaking = () => {
-    if ((window as any).currentAudioSource) {
-      (window as any).currentAudioSource.stop();
-      (window as any).currentAudioSource = null;
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
     }
     setIsSpeaking(false);
   };
@@ -535,7 +497,13 @@ function ChatApp({ userData }: { userData: any }) {
                       <p className="whitespace-pre-wrap font-medium">{message.text}</p>
                     ) : (
                       <div className="markdown-body prose prose-slate prose-invert max-w-none prose-headings:font-serif prose-headings:font-bold prose-headings:tracking-tight prose-headings:text-blue-300 prose-a:text-cyan-400 prose-strong:text-blue-100 prose-li:marker:text-blue-500/50 text-[15px] leading-relaxed">
-                        <ReactMarkdown>{message.text}</ReactMarkdown>
+                        <ReactMarkdown
+                          components={{
+                            a: ({node, ...props}) => <a {...props} target="_blank" rel="noopener noreferrer" />
+                          }}
+                        >
+                          {message.text}
+                        </ReactMarkdown>
                       </div>
                     )}
                   </div>
